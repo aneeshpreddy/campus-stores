@@ -502,6 +502,70 @@ body > main {
   font-variant-numeric: tabular-nums;
 }
 
+/* handover check: claims read from notes vs the register */
+#campus-stores .bad {
+  background: var(--bad);
+  color: var(--badtxt);
+  border-color: var(--badline);
+}
+#campus-stores .handcheck {
+  background: var(--surface);
+  border: 1px solid #c7d2fe;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: 14px 16px 6px;
+  margin-top: 12px;
+  box-shadow: var(--shadow);
+}
+#campus-stores .handcheck > p {
+  padding-bottom: 8px;
+}
+#campus-stores .engine {
+  display: block;
+  color: var(--accent-ink);
+  margin-top: 2px;
+}
+#campus-stores .claim {
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+#campus-stores .claim p {
+  margin: 4px 0 2px;
+}
+#campus-stores .claim small {
+  display: block;
+}
+#campus-stores .claim .buttons {
+  margin: 8px 0 0;
+}
+#campus-stores .claimhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+#campus-stores .claimhead strong {
+  font-weight: 600;
+}
+#campus-stores .claimhead .tag:last-child {
+  margin-left: auto;
+}
+#campus-stores .quote {
+  font-style: italic;
+}
+#campus-stores .readout {
+  margin-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+  padding-top: 8px;
+}
+#campus-stores .readout summary {
+  color: var(--accent);
+  font-size: 13px;
+}
+#campus-stores .readout .engine {
+  margin: 6px 0 2px;
+}
+
 /* toolbars and forms */
 #campus-stores .buttons {
   flex-wrap: wrap;

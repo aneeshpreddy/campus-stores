@@ -410,12 +410,12 @@
       '<div class="form"><label><span>Now with</span><select name="holder" required>' +
       opts(
         people.map((x) => [x, x]),
-        l.holder,
+        p.holder || l.holder,
       ) +
       '</select></label><label><span>Expected back</span><select name="expected" required>' +
       opts(
         dueTimes.map((t) => [t, t]),
-        expectedOf(l),
+        p.expected || expectedOf(l),
       ) +
       '</select></label><label class="full"><span>What the borrower said (optional)</span><input name="why" maxlength="200" autocomplete="off"></label></div><div class="buttons"><button type="submit" class="primary">Save custody</button>' +
       cancel +
@@ -536,6 +536,172 @@
     for (const r of groups) html += kitCard(r);
     return html;
   }
+  // ---- Handover reader: notes → claims (rule-based, offline) ----
+  // Claims are suggestions. Only the register and a physical tag check change state.
+  const claimKinds = {
+    return: "Return reported",
+    custody: "Who has it",
+    damage: "Damage reported",
+  };
+  const typeWords = [
+    [/projector/i, "HDMI projector"],
+    [/speaker/i, "Portable speaker"],
+    [/adapter|dongle/i, "USB-C → HDMI adapter"],
+    [/microphone|\bmic\b/i, "Wireless microphone"],
+    [/camera/i, "Digital camera"],
+  ];
+  function readNote(text, phase, author = "") {
+    const claims = [];
+    const self = people.find((p) => author.includes(p)) || "";
+    let last = "";
+    for (const sentence of String(text).split(/(?<=[.!?])\s+|\n+/)) {
+      const lower = sentence.toLowerCase();
+      let named = people.filter((p) =>
+        new RegExp("\\b" + p.split(" ")[0] + "\\b", "i").test(sentence),
+      );
+      if (!named.length && /^\s*(she|he|they)\b/i.test(sentence) && last) named = [last];
+      if (!named.length && self && /\b(i|i'll|i’ll|me|my|our|we)\b/i.test(sentence)) named = [self];
+      if (named.length) last = named[0];
+      const person = named[0] || "";
+      const m = lower.match(/\b(\d{1,2})(?::\d\d)?\s*(am|pm)\b|\bnoon\b/);
+      const time = m
+        ? (/tomorrow|saturday|\bsat\b/.test(lower) || phase === 2 ? "Sat " : "Fri ") +
+          (m[0] === "noon" ? "noon" : m[1] + " " + m[2])
+        : "";
+      const kind = /damag|broken|frayed|cracked|faulty|not working/.test(lower)
+        ? "damage"
+        : /\b(returned|brought|came back|dropped off|handed back|gave back)\b/.test(lower)
+          ? "return"
+          : /\b(still has|has|kept|keeps|stays with|holding)\b/.test(lower)
+            ? "custody"
+            : "";
+      const tags = [...sentence.matchAll(/\b([A-Za-z]{2})-?(\d{2})\b/g)].map((x) =>
+        (x[1] + "-" + x[2]).toUpperCase(),
+      );
+      if (!kind) {
+        // "She'll be here at 9 am tomorrow" — a time for the last custody claim.
+        const prior = claims.filter((c) => c.kind === "custody" && (!person || c.person === person)).pop();
+        if (time && prior) prior.time = time;
+        continue;
+      }
+      const base = { kind, sentence: sentence.trim(), person, time };
+      for (const tag of tags) {
+        const a = getAsset(tag);
+        claims.push(a ? { ...base, asset: a.id, type: a.type } : { ...base, unknownTag: tag });
+      }
+      const tagged = tags.map(getAsset).filter(Boolean).map((a) => a.type);
+      for (const [re, type] of typeWords)
+        if (re.test(sentence) && !tagged.includes(type)) claims.push({ ...base, type });
+    }
+    return claims;
+  }
+  const go = (label, val, style = "") => btn(label, "goto", JSON.stringify(val), style);
+  function checkClaim(c) {
+    const r = { state: "Insufficient evidence", cls: "", ev: [], action: "" };
+    if (c.unknownTag) {
+      r.text = "No unit in inventory is tagged " + c.unknownTag + ". Nothing was matched.";
+      return r;
+    }
+    let cands = s.loans.filter((l) => (c.asset ? l.asset === c.asset : typeOf(l) === c.type));
+    if (c.person) {
+      const linked = cands.filter((l) => l.who === c.person || l.holder === c.person);
+      if (linked.length) cands = linked;
+    }
+    const open = cands.filter((l) => !l.back);
+    const pool = open.length ? open : cands.slice(-1);
+    if (!pool.length) {
+      r.text = "No slip in the register for a " + c.type + (c.person ? " linked to " + c.person : "") + ".";
+      return r;
+    }
+    if (pool.length > 1) {
+      r.state = "Needs verification";
+      r.cls = "warn";
+      r.text = pool.length + " open slips could match (" + pool.map((l) => "L-" + l.num).join(", ") + "). Read the asset tag to decide.";
+      return r;
+    }
+    const l = pool[0];
+    r.ev.push("L-" + l.num + " · " + l.asset + " · " + l.req + " · collected by " + l.who);
+    if (!l.back) r.ev.push("register: " + custodyLine(l));
+    else r.ev.push("checked in " + shifts[l.returnedAt].time + " from " + l.returnedBy);
+    const verified = (t) => Object.assign(r, { state: "Confirmed by record", cls: "good", text: t });
+    if (c.kind === "return") {
+      if (l.back) return verified("L-" + l.num + " is closed: tag " + l.asset + " was checked at the desk.");
+      return Object.assign(r, {
+        state: "Reported, not verified",
+        cls: "warn",
+        text: "The note says it came back, but L-" + l.num + " is still open. A note is not a return: check the unit in by its tag.",
+        action: go("Check in L-" + l.num, { num: l.num, mode: "return" }, "primary"),
+      });
+    }
+    if (c.kind === "custody") {
+      if (l.back) return verified("Resolved: L-" + l.num + " was checked in " + shifts[l.returnedAt].time + ".");
+      const fix = go("Record on L-" + l.num, {
+        num: l.num,
+        mode: "custody",
+        holder: c.person,
+        expected: dueAt[c.time] ? c.time : "",
+      }, "primary");
+      if (c.person && l.holder !== c.person)
+        return Object.assign(r, {
+          state: "Not on record",
+          cls: "warn",
+          text: "The note says " + c.person + " has it; L-" + l.num + " still records " + l.holder + ".",
+          action: fix,
+        });
+      if (c.time && dueAt[c.time] && expectedOf(l) !== c.time)
+        return Object.assign(r, {
+          state: "Conflicting information",
+          cls: "bad",
+          text: "The note says back " + c.time + "; L-" + l.num + " says " + expectedOf(l) + ".",
+          action: fix,
+        });
+      return verified("L-" + l.num + " matches: " + custodyLine(l) + ".");
+    }
+    // damage
+    if (inRepair(getAsset(l.asset))) return verified(l.asset + " is in repair and cannot be issued.");
+    if (!l.back)
+      return Object.assign(r, {
+        state: "Reported, not verified",
+        cls: "warn",
+        text: "Damage is reported but " + l.asset + " has not been checked in. Inspect it at check-in.",
+        action: go("Check in L-" + l.num + " as damaged", {
+          num: l.num,
+          mode: "return",
+          cond: "damaged",
+          detail: c.sentence.slice(0, 150),
+        }, "primary"),
+      });
+    return Object.assign(r, {
+      state: "Conflicting information",
+      cls: "bad",
+      text: "L-" + l.num + " was checked in as working, but the note reports damage. Inspect " + l.asset + " on shelf " + getAsset(l.asset).bin + ".",
+      action: btn("Send " + l.asset + " to repair", "repair", l.asset),
+    });
+  }
+  const claimLine = (c) =>
+    (c.person ? c.person + " · " : "") +
+    (c.asset || c.unknownTag || c.type) +
+    (c.kind === "custody" && c.time ? " · back " + c.time : "");
+  function claimCard(c) {
+    const r = checkClaim(c);
+    return (
+      '<div class="claim"><div class="claimhead">' +
+      badge(claimKinds[c.kind]) +
+      "<strong>" +
+      esc(claimLine(c)) +
+      "</strong>" +
+      badge(r.state, r.cls) +
+      "</div><p>" +
+      esc(r.text) +
+      "</p>" +
+      (r.ev.length ? "<small>Evidence: " + r.ev.map(esc).join(" · ") + "</small>" : "") +
+      '<small class="quote">From the note: “' + esc(c.sentence) + "”</small>" +
+      (r.action ? '<div class="buttons">' + r.action + "</div>" : "") +
+      "</div>"
+    );
+  }
+  const engineLabel =
+    '<small class="engine">Rule-based note reader · offline demo, no AI model connected · suggestions only, nothing changes until you confirm</small>';
   function deskbook() {
     let html = head(
       "Desk book",
@@ -586,13 +752,41 @@
         "Kabir Sen · Film Society",
         "I brought the projector and speaker. Leela Das has our adapter. She’ll be at the counter at 9 am tomorrow.",
       ]);
+    entries[0].push(0, true);
+    entries[1].push(0, true);
+    if (entries[2]) entries[2].push(1, true);
     for (const n of s.notes)
       entries.push([
         shifts[n.phase].time,
         n.author || "Counter handover",
         n.text,
+        n.phase,
+        !n.author,
       ]);
-    for (const [t, author, body] of entries.slice().reverse())
+    // Read every human-written entry and reconcile its claims with the register.
+    const read = entries.map(([, author, body, phase, human]) =>
+      human ? readNote(body, phase, author) : [],
+    );
+    const pending = read
+      .flat()
+      .map((c) => [c, checkClaim(c)])
+      .filter(([, r]) => r.cls !== "good");
+    const total = read.flat().length;
+    html +=
+      '<section class="handcheck"><div class="kithead"><div><h3>Handover check</h3>' +
+      engineLabel +
+      "</div>" +
+      badge(
+        pending.length ? pending.length + " of " + total + " claims need action" : "All " + total + " claims match the register",
+        pending.length ? "warn" : "good",
+      ) +
+      "</div>" +
+      (pending.length
+        ? pending.map(([c]) => claimCard(c)).join("")
+        : "<p>Every claim in the notes below is backed by a slip or a tag check.</p>") +
+      "</section>";
+    entries.forEach((e, i) => e.push(read[i]));
+    for (const [t, author, body, , , claims] of entries.slice().reverse())
       html +=
         '<article class="record"><small>' +
         esc(t) +
@@ -600,7 +794,17 @@
         esc(author) +
         "</h3><p>" +
         esc(body) +
-        "</p></article>";
+        "</p>" +
+        (claims.length
+          ? '<details class="readout"><summary>Read as ' +
+            claims.length +
+            (claims.length > 1 ? " claims" : " claim") +
+            "</summary>" +
+            engineLabel +
+            claims.map(claimCard).join("") +
+            "</details>"
+          : "") +
+        "</article>";
     return (
       html +
       '<form data-note><div class="form"><label class="full"><span>Note for the next shift</span><textarea name="note" rows="2" maxlength="400" required></textarea></label></div><button type="submit">Add handover note</button></form>'
@@ -690,6 +894,45 @@
       case "cancel":
         s.editing = false;
         break;
+      case "goto": {
+        // A claim's suggested action: open the right slip's panel, pre-filled. A person still confirms.
+        let p;
+        try {
+          p = JSON.parse(v);
+        } catch {
+          return;
+        }
+        const l = s.loans.find((x) => x.num === Number(p.num));
+        if (!l || l.back || !["return", "custody"].includes(p.mode)) return;
+        s.tab = "Loan register";
+        s.editing = false;
+        s.onlyOpen = true;
+        s.panel = {
+          num: l.num,
+          mode: p.mode,
+          error: "",
+          tag: "",
+          holder: people.includes(p.holder) ? p.holder : "",
+          expected: dueAt[p.expected] ? p.expected : "",
+          cond: conditions[p.cond] ? p.cond : "",
+          detail: typeof p.detail === "string" ? p.detail.slice(0, 160) : "",
+        };
+        focusSel = ".panel input, .panel select";
+        s.notice = "Opened L-" + l.num + " from the handover check. Confirm against the physical unit.";
+        break;
+      }
+      case "repair": {
+        const a = getAsset(v);
+        if (!a || inRepair(a) || out(a.id)) return;
+        s.repairs.push(a.id);
+        s.notes.push({
+          phase: s.phase,
+          author: "Return desk · " + a.id,
+          text: a.id + " " + a.type + " sent to repair after a handover note reported damage.",
+        });
+        s.notice = a.id + " sent to repair. It cannot be issued until repaired.";
+        break;
+      }
       case "scope":
         s.onlyOpen = v === "0";
         break;

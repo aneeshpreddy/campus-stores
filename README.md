@@ -26,7 +26,8 @@ The handover lived in someone's note instead of in the record. So the **decision
 4. **Return outcome.** Check-in also records the unit's condition. **Damaged** closes the slip but sends the unit to repair, so it can't be issued again until fixed. **Accessory missing** closes the slip and records what's missing. Either one requires a description and posts a follow-up to the desk book.
 5. **Overdue / Due now flags** are computed from desk time against each slip's current expected time.
 6. **"Still out right now"** sits at the top of the desk book and is read from the register, so the morning shift sees outstanding units before any prose.
-7. **Issuing a kit** (small, same idea): "Issue from this request" opens a slip form with the request and its return time filled in. After each slip the form stays open with the same borrower and lists what is still to issue. Kabir can't leave without the adapter and nobody notice.
+7. **Handover check: notes reconciled against the register.** Every human-written desk book entry is read into claims: *return reported*, *who has it*, *damage reported*. Each claim is matched to slips and labelled **Confirmed by record**, **Reported, not verified**, **Not on record**, **Conflicting information**, **Needs verification** or **Insufficient evidence**. Each label shows the slip it rests on and the sentence it came from. For example, *"Kabir returned the projector and speaker"* while L-403 is still open becomes *Reported, not verified: a note is not a return; check the unit in by its tag*. Each action button only opens the right slip's panel, pre-filled. A person still reads the tag and confirms. Made-up tags such as `ZZ-99` are reported as *Insufficient evidence*, never matched. The reader is **rule-based and runs offline. No AI model is connected**, and the screen says so. A language model could replace the extraction step later. The matching and the tag check would stay deterministic, so its output could only ever suggest.
+8. **Issuing a kit** (small, same idea): "Issue from this request" opens a slip form with the request and its return time filled in. After each slip the form stays open with the same borrower and lists what is still to issue. Kabir can't leave without the adapter and nobody notice.
 
 ### Walkthrough of the same job with the change
 
@@ -34,6 +35,7 @@ The handover lived in someone's note instead of in the record. So the **decision
 |---|---|---|
 | Fri 3:45 pm | Three blank slip forms; nothing says the adapter is still missing | Open RQ-214 → **Issue from this request**. After the projector and speaker, the form says *Still to issue for RQ-214: USB-C → HDMI adapter* |
 | Fri 7:30 pm | Click **Record return** twice and hope the rows are right; type a note about Leela | **Check in** the projector (type `PR-04`) and speaker (`SP-02`). Typing `SP-05` by mistake is caught. On the adapter, **Still out…** → Leela Das, Sat 9 am, "dropping off at nine" |
+| Fri 7:30 pm (note) | The note is just text | Type *"Kabir returned the projector and speaker. Leela still has the adapter and will return it tomorrow at 9 AM. The speaker cable appeared damaged."* The handover check shows the speaker as *reported, not verified*, Leela as *not on record*, and the damage as *reported*. Each comes with a button that opens the right slip, pre-filled |
 | Sat 9:00 am | Read the desk book, find the adapter slip under Kabir's name, overdue, and work out which adapter it is | Desk book opens with *L-404 · AD-12 · with Leela Das · expected Sat 9 am · Due now*. **Check in** pre-selects Leela as the person handing it back. Type the tag: `AD-12` closes the slip, `AD-15` is refused with an explanation |
 
 ### What I kept
@@ -50,7 +52,8 @@ The change reshapes the register rather than adding a new screen.
 
 - Barcode scanning: typing the tag is a stand-in for scanning it.
 - Undoing a return: the tag check removes most of the need.
-- An AI layer that reads handover notes: a model could turn "Kabir returned the projector" into a suggested event. But the failure I saw was a claim being treated as a fact. A model's reading of a note is also a claim, so it could only ever propose a match, and a slip would still close only on a physical tag check. I fixed the record first. Note extraction is the next step, kept strictly advisory.
+- A connected language model: the handover check uses rules, not an LLM. The failure I saw was a claim being treated as a fact. A model's reading of a note is also a claim, so it could only propose matches, and a slip still closes only on a physical tag check. The rules cover the sample scenario's phrasing. Unusual wording will be missed, and the screen says it is a rule-based demo.
+- Visual refresh: the styling is a light, token-based design with a navy sidebar and an indigo accent. Behaviour is unchanged.
 - Editing a slip's borrower after issue: custody is recorded alongside the original "collected by", not instead of it, so the history stays honest.
 
 ### One observation at a real counter
