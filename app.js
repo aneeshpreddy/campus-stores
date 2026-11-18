@@ -99,6 +99,7 @@
     ["Inventory", "package"],
     ["Loan register", "book-open"],
     ["Desk book", "messages-square"],
+    ["Activity", "package-open"],
   ];
   const blankDraft = () => ({ req: "", asset: "", who: "", due: "", error: "" });
   const original = () => ({
@@ -118,10 +119,13 @@
         holder: "Tara Shah",
         expected: "",
         log: [],
+        issuedAt: null,
+        at: 0,
       },
     ],
     notes: [],
     repairs: [],
+    seq: 0,
     editing: false,
     draft: blankDraft(),
     panel: null,
@@ -810,11 +814,56 @@
       '<form data-note><div class="form"><label class="full"><span>Note for the next shift</span><textarea name="note" rows="2" maxlength="400" required></textarea></label></div><button type="submit">Add handover note</button></form>'
     );
   }
+  // One timeline of everything that happened at the desk, newest first.
+  function activity() {
+    let html = head(
+      "Activity",
+      "Every issue, check-in, custody change and note, newest first",
+    );
+    const events = [];
+    for (const l of s.loans) {
+      const unit = l.asset + " " + typeOf(l);
+      if (Number.isInteger(l.issuedAt))
+        events.push([l.at, l.issuedAt, "Issued", "", "L-" + l.num + " · " + unit + " to " + l.who + " for " + l.req + " · due " + l.due]);
+      for (const e of l.log) {
+        const kind = e.text.startsWith("Checked in")
+          ? e.text.includes("Damaged") || e.text.includes("Accessory")
+            ? ["Checked in · exception", "warn"]
+            : ["Checked in", "good"]
+          : ["Custody updated", ""];
+        events.push([e.at || 0, e.phase, kind[0], kind[1], "L-" + l.num + " · " + unit + " · " + e.text]);
+      }
+    }
+    for (const n of s.notes)
+      events.push([n.at || 0, n.phase, n.author ? n.author.split(" · ")[0] : "Handover note", "", n.text]);
+    events.sort((a, b) => b[0] - a[0]);
+    if (!events.length)
+      return html + '<p class="empty">Nothing has happened on this shift yet. Issue a slip to start the record.</p>';
+    return (
+      html +
+      '<ol class="timeline">' +
+      events
+        .map(
+          ([, phase, kind, cls, text]) =>
+            "<li><small>" +
+            esc(shifts[phase].time) +
+            "</small><div>" +
+            badge(kind, cls) +
+            "<p>" +
+            esc(text) +
+            "</p></div></li>",
+        )
+        .join("") +
+      "</ol>" +
+      '<p class="more"><small>Kept in this browser’s storage only. It is a working record, not a tamper-proof audit log.</small></p>'
+    );
+  }
   const screens = {
     Requests: requestPage,
     Inventory: inventory,
     "Loan register": register,
     "Desk book": deskbook,
+    Activity: activity,
   };
   function paint() {
     const phase = shifts[s.phase];
@@ -849,6 +898,16 @@
   }
   function commit(msg) {
     if (msg) s.notice = msg;
+    // Stamp new records in creation order so the activity timeline is chronological.
+    const stamp = (x) => {
+      if (x.at === undefined) x.at = ++s.seq;
+    };
+    for (const l of s.loans) {
+      if (l.issuedAt === undefined) l.issuedAt = s.phase;
+      stamp(l);
+      l.log.forEach(stamp);
+    }
+    s.notes.forEach(stamp);
     paint();
     try {
       localStorage.setItem(storageKey, JSON.stringify(s));
@@ -979,7 +1038,7 @@
     const tag = normaliseTag(form.get("tag"));
     const by = String(form.get("by"));
     const cond = String(form.get("cond") || "ok");
-    const detail = String(form.get("detail") || "").trim();
+    const detail = String(form.get("detail") || "").trim().replace(/[.\s]+$/, "");
     Object.assign(s.panel, { tag, cond, detail });
     if (tag !== l.asset) {
       const other = getAsset(tag);
@@ -1218,6 +1277,7 @@
       loans: d.loans.map((l) => ({ ...l, log: l.log.map((x) => ({ ...x })) })),
       notes: d.notes.map((n) => ({ ...n })),
       repairs: Array.isArray(d.repairs) ? d.repairs.filter((id) => getAsset(id)) : [],
+      seq: Number.isInteger(d.seq) ? d.seq : 1000,
       draft: { ...blankDraft(), ...(d.draft || {}) },
       panel: null,
     };
