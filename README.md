@@ -23,9 +23,10 @@ The handover lived in someone's note instead of in the record. So the **decision
 1. **Register grouped by request.** RQ-214 shows as one kit ("1 of 3 out"). Each slip shows unit, type, model, home bin and who collected it. Approved items not yet issued appear as "Not issued" rows.
 2. **Check in by asset tag.** Closing a slip asks for the tag on the unit and who handed it back. A mismatch is explained instead of accepted, e.g. *"AD-15 (Anker A8312) is recorded as on the shelf, not on loan. L-404 is for AD-12 (Belkin AVC002)."* Each return is stamped with the time and the person.
 3. **"Still out…" records custody.** You record who has the unit now, when it's expected back and what the borrower said. The slip shows `With Leela Das · expected Sat 9 am (was due Fri 8 pm)`, and the update is posted to the desk book automatically.
-4. **Overdue / Due now flags** are computed from desk time against each slip's current expected time.
-5. **"Still out right now"** sits at the top of the desk book and is read from the register, so the morning shift sees outstanding units before any prose.
-6. **Issuing a kit** (small, same idea): "Issue from this request" opens a slip form with the request and its return time filled in. After each slip the form stays open with the same borrower and lists what is still to issue. Kabir can't leave without the adapter and nobody notice.
+4. **Return outcome.** Check-in also records the unit's condition. **Damaged** closes the slip but sends the unit to repair, so it can't be issued again until fixed. **Accessory missing** closes the slip and records what's missing. Either one requires a description and posts a follow-up to the desk book.
+5. **Overdue / Due now flags** are computed from desk time against each slip's current expected time.
+6. **"Still out right now"** sits at the top of the desk book and is read from the register, so the morning shift sees outstanding units before any prose.
+7. **Issuing a kit** (small, same idea): "Issue from this request" opens a slip form with the request and its return time filled in. After each slip the form stays open with the same borrower and lists what is still to issue. Kabir can't leave without the adapter and nobody notice.
 
 ### Walkthrough of the same job with the change
 
@@ -49,6 +50,7 @@ The change reshapes the register rather than adding a new screen.
 
 - Barcode scanning: typing the tag is a stand-in for scanning it.
 - Undoing a return: the tag check removes most of the need.
+- An AI layer that reads handover notes: a model could turn "Kabir returned the projector" into a suggested event. But the failure I saw was a claim being treated as a fact. A model's reading of a note is also a claim, so it could only ever propose a match, and a slip would still close only on a physical tag check. I fixed the record first. Note extraction is the next step, kept strictly advisory.
 - Editing a slip's borrower after issue: custody is recorded alongside the original "collected by", not instead of it, so the history stays honest.
 
 ### One observation at a real counter

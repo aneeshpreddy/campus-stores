@@ -121,6 +121,7 @@
       },
     ],
     notes: [],
+    repairs: [],
     editing: false,
     draft: blankDraft(),
     panel: null,
@@ -133,6 +134,12 @@
   const getReq = (id) => requests.find((x) => x.id === id);
   const out = (id) => s.loans.find((l) => l.asset === id && !l.back);
   const typeOf = (l) => getAsset(l.asset).type;
+  const inRepair = (a) => a.repair || s.repairs.includes(a.id);
+  const conditions = {
+    ok: "Working, all accessories present",
+    damaged: "Damaged · send to repair",
+    missing: "Accessory missing",
+  };
   const expectedOf = (l) => l.expected || l.due;
   const timing = (l) => {
     const now = shifts[s.phase].at;
@@ -297,7 +304,7 @@
       "</select></label></div>";
     for (const a of assets) {
       const loan = out(a.id);
-      const status = a.repair ? "In repair" : loan ? "On loan" : "On shelf";
+      const status = inRepair(a) ? "In repair" : loan ? "On loan" : "On shelf";
       if (s.filter !== "All items" && s.filter !== status) continue;
       html += row(
         a.id + " · " + a.type,
@@ -312,7 +319,7 @@
   }
   function issueForm() {
     const d = s.draft;
-    const available = assets.filter((a) => !a.repair && !out(a.id));
+    const available = assets.filter((a) => !inRepair(a) && !out(a.id));
     const r = getReq(d.req);
     const select = (label, key, options) =>
       "<label><span>" +
@@ -385,7 +392,11 @@
           people.map((x) => [x, x]),
           l.holder,
         ) +
-        '</select></label></div><div class="buttons"><button type="submit" class="primary">Confirm check-in</button>' +
+        '</select></label><label><span>Condition</span><select name="cond" required>' +
+        opts(Object.entries(conditions), p.cond || "ok") +
+        '</select></label><label><span>What is damaged or missing</span><input name="detail" maxlength="160" autocomplete="off" placeholder="Needed unless working" value="' +
+        esc(p.detail || "") +
+        '"></label></div><div class="buttons"><button type="submit" class="primary">Confirm check-in</button>' +
         cancel +
         "</div></form>"
       );
@@ -421,7 +432,9 @@
         l.returnedBy
       : custodyLine(l);
     const right = l.back
-      ? badge("Returned", "good")
+      ? l.condition && l.condition !== "ok"
+        ? badge(l.condition === "damaged" ? "Returned · damaged" : "Returned · accessory missing", "warn")
+        : badge("Returned", "good")
       : (t ? badge(t, "warn") : "") +
         btn("Check in", "panel", l.num + ":return", "primary") +
         btn("Still out…", "panel", l.num + ":custody");
@@ -722,7 +735,9 @@
   function checkIn(l, form) {
     const tag = normaliseTag(form.get("tag"));
     const by = String(form.get("by"));
-    s.panel.tag = tag;
+    const cond = String(form.get("cond") || "ok");
+    const detail = String(form.get("detail") || "").trim();
+    Object.assign(s.panel, { tag, cond, detail });
     if (tag !== l.asset) {
       const other = getAsset(tag);
       let msg;
@@ -756,14 +771,46 @@
       commit(msg);
       return;
     }
-    if (!people.includes(by)) return;
+    if (!people.includes(by) || !conditions[cond]) return;
+    if (cond !== "ok" && !detail) {
+      s.panel.error = "Say what is damaged or missing so the next shift can follow it up.";
+      focusSel = '.panel [name="detail"]';
+      commit(s.panel.error);
+      return;
+    }
     l.back = true;
     l.returnedAt = s.phase;
     l.returnedBy = by;
+    l.condition = cond;
+    l.issue = detail;
     l.log.push({
       phase: s.phase,
-      text: "Checked in from " + by + " · tag " + tag + " confirmed",
+      text:
+        "Checked in from " +
+        by +
+        " · tag " +
+        tag +
+        " confirmed" +
+        (cond === "ok" ? "" : " · " + conditions[cond] + ": " + detail),
     });
+    if (cond === "damaged" && !s.repairs.includes(l.asset)) s.repairs.push(l.asset);
+    if (cond !== "ok")
+      s.notes.push({
+        phase: s.phase,
+        author: "Return desk · L-" + l.num,
+        text:
+          l.asset +
+          " " +
+          typeOf(l) +
+          " came back from " +
+          by +
+          " (" +
+          l.req +
+          "). " +
+          (cond === "damaged"
+            ? "Damaged: " + detail + ". Sent to repair; it cannot be issued until repaired."
+            : "Accessory missing: " + detail + ". Follow up with " + getReq(l.req).club + "."),
+      });
     s.panel = null;
     const r = getReq(l.req);
     const still = s.loans.filter((x) => x.req === r.id && !x.back);
@@ -855,7 +902,7 @@
     };
     const unit = getAsset(d.asset),
       r = getReq(d.req);
-    if (!r || !unit || unit.repair || out(d.asset) || !people.includes(d.who) || !dueAt[d.due])
+    if (!r || !unit || inRepair(unit) || out(d.asset) || !people.includes(d.who) || !dueAt[d.due])
       return fail("Complete every field before saving the slip.");
     if (!r.items.includes(unit.type))
       return fail(
@@ -927,6 +974,7 @@
       ...d,
       loans: d.loans.map((l) => ({ ...l, log: l.log.map((x) => ({ ...x })) })),
       notes: d.notes.map((n) => ({ ...n })),
+      repairs: Array.isArray(d.repairs) ? d.repairs.filter((id) => getAsset(id)) : [],
       draft: { ...blankDraft(), ...(d.draft || {}) },
       panel: null,
     };
