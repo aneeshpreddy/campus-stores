@@ -38,6 +38,8 @@ body > main {
   --mark: light-dark(#bd502f, #f2a585);
   --ok: light-dark(#e3f1e8, #2d4838);
   --oktxt: light-dark(#25523d, #bedac8);
+  --warn: light-dark(#fbe4dc, #4a2b22);
+  --warntxt: light-dark(#8a2f15, #f6c2ae);
   background: var(--paper);
   color: var(--ink);
   font:
@@ -263,6 +265,87 @@ body > main {
   background: var(--ok);
   color: var(--oktxt);
 }
+#campus-stores .warn {
+  background: var(--warn);
+  color: var(--warntxt);
+}
+#campus-stores .kit {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px 0;
+  margin-top: 12px;
+}
+#campus-stores .kithead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding-bottom: 9px;
+}
+#campus-stores .kithead small,
+#campus-stores .outnow small {
+  display: block;
+}
+#campus-stores .row .actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+#campus-stores .custody {
+  color: var(--ink);
+  font-weight: 600;
+  margin-top: 2px;
+}
+#campus-stores .custody.late {
+  color: var(--warntxt);
+}
+#campus-stores .log {
+  font-style: italic;
+}
+#campus-stores .panel {
+  background: var(--desk);
+  border-left: 3px solid var(--mark);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+#campus-stores .panel .buttons {
+  margin: 0;
+}
+#campus-stores .error {
+  background: var(--warn);
+  color: var(--warntxt);
+  border-radius: 6px;
+  padding: 6px 9px;
+  margin: 8px 0;
+}
+#campus-stores .hint {
+  color: var(--quiet);
+  margin-bottom: 10px;
+}
+#campus-stores .more {
+  border-top: 1px solid var(--line);
+  padding: 7px 0 9px;
+}
+#campus-stores .kitlist {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+#campus-stores .kitlist li {
+  margin: 4px 0;
+}
+#campus-stores .outnow {
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--mark);
+  border-radius: 0 8px 8px 0;
+}
+#campus-stores .outnow ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
 #campus-stores .record {
   margin-top: 14px;
   padding: 12px 13px;
@@ -361,6 +444,12 @@ body > main {
   }
   #campus-stores .row {
     gap: 5px;
+  }
+  #campus-stores .row.slip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #campus-stores .row .actions {
+    justify-content: flex-start;
   }
 }
 @media (pointer: coarse) {
